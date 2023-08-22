@@ -1,4 +1,5 @@
 import csv
+import json
 import os.path
 import sqlite3
 
@@ -36,8 +37,6 @@ def csv_to_sqllite(sql_filename, csv_reader, csv_filename, csv_sz):
     cur.execute(query)
     con.commit()
     insert_query_el = "INSERT INTO " + csv_filename
-    # for i in range(colums-1):
-    #     insert_query_el += table_colums[i] + ", "
     insert_query_el += " VALUES ("
     count = csv_sz
     count1 = 0
@@ -49,11 +48,28 @@ def csv_to_sqllite(sql_filename, csv_reader, csv_filename, csv_sz):
             query += line[i] + ", "
         query += line[colums-1] + ")"
         res = int((100 * count1 / count))
-        print("Converting file " + csv_filename + "[" + "*" * res + " " * (100-res) + "]" + res + "%")
+        print("Converting file " + csv_filename + " " + str(res) + "%")
         cur.execute(query)
         con.commit()
         count1 += 1
     con.close()
+
+
+# function to find how many lines in csv
+def csv_sz(path):
+    with open(path, 'r') as file:
+        reader = csv.reader(file, delimiter=',')
+        return sum(1 for _ in reader) - 1
+
+
+# Scan directory for csv files function
+def scan_directory(list_of_csv_path, path):
+    files = os.listdir(path)
+    for file in files:
+        if len(file.split('.')) == 1:
+            scan_directory(list_of_csv_path, path+"\\"+file)
+        elif file.split('.')[1] == "csv":
+            list_of_csv_path.append(path+"\\"+file)
 
 
 # main part
@@ -69,9 +85,7 @@ if __name__ == "__main__":
             path_to_file = input("Введите путь до файла в этой директории, если же он находится в той же папке,"
                                  "что и main.py напишите название файла\n")
             if path_to_file[-4:] == ".csv" and os.path.isfile(path_to_file):
-                with open(path_to_file, 'r') as file:
-                    reader = csv.reader(file, delimiter=',')
-                    sz = sum(1 for _ in reader)-1
+                sz = csv_sz(path_to_file)
                 with open(path_to_file, 'r') as file:
                     reader = csv.reader(file, delimiter=',')
                     csv_filename = path_to_file.split('\\')[-1][:-4]
@@ -81,3 +95,32 @@ if __name__ == "__main__":
                     break
             else:
                 print("Something went wrong, try again")
+    if choose_way == DIRECTORY_CONVERTING:
+        while True:
+            path_to_directory = input("Выберите путь до папки, в которой находятся csv - файлы\n")
+            if os.path.isdir(path_to_directory):
+                files = os.listdir(path_to_directory)
+                csv_files_path = []
+                scan_directory(csv_files_path, path_to_directory)
+                if csv_files_path == []:
+                    print("В указанной директории нет файлов формата csv, попробуйте снова")
+                    continue
+                files_to_convert = {}
+                for file_path in csv_files_path:
+                    files_to_convert[file_path] = (True, "user", os.path.getsize(file_path))
+                with open("files_to_convert.json", "w") as json_file:
+                    json.dump(files_to_convert, json_file)
+                agree_with_converting = input("In file files_to_convert.json change what you need:\n"
+                                              "the first item is true and anything else will be ignored\n"
+                                              "the second is the name of db file where the information will place in\n"
+                                              "write anything to continue\n")
+                with open("files_to_convert.json") as json_file:
+                    data = json.load(json_file)
+                    for el in csv_files_path:
+                        if data[el][0]:
+                            with open(el, "r") as csv_file:
+                                reader = csv.reader(csv_file, delimiter=",")
+                                csv_to_sqllite(data[el][1], reader, el.split("\\")[-1].split(".")[0], csv_sz(el))
+                print("Все прошло удачно")
+                os.remove("files_to_convert.json")
+                break
